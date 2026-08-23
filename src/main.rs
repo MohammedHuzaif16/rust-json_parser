@@ -15,7 +15,57 @@ fn parseInp(input: &str) -> Result<JsonValue, String> {
         "[]" => Ok(JsonValue::Array(vec![])),
         _ => {
             if input.starts_with('"') && input.ends_with('"') {
-                Ok(JsonValue::String(String::from(&input[1..input.len() - 1])))
+                // Ok(JsonValue::String(String::from(&input[1..input.len() - 1])))
+                let mut build_str = String::new();
+                let mut escaped:bool =false;
+                let mut chars = input[1..input.len() - 1].chars().peekable();
+
+                while let Some(char) = chars.next(){
+                     if char == '\\'{
+                    escaped=true;
+                   }
+                   else{
+                    if char == 'u' && escaped{
+                        let mut hSum= 0;
+                        let mut i=0;
+                        while i<4{
+                            match chars.next(){
+                                Some(char)=> {
+                                    hSum = hSum * 16 + char.to_digit(16).ok_or(String::from("Invalid String"))?;
+                                },
+                                None=> return Err(String::from("INVALID STRING"))
+
+                            };
+                            i+=1
+                        } 
+                        let val = char::from_u32(hSum).ok_or(String::from("Invalid String"))?;
+                        build_str.push(val);
+                        escaped = false;
+                    }
+                    else if escaped{
+                        match char{
+                            'n'=> build_str.push('\n'),
+                            '\\'=> build_str.push('\\'),
+                            't'=> build_str.push('\t'),
+                            'r'=> build_str.push('\r'),
+                            'f'=> build_str.push(char::from_u32(0x000c).unwrap()),
+                            'b'=> build_str.push(char::from_u32(0x0008).unwrap()),
+                            '"'=> build_str.push('\"'),
+                            '/'=> build_str.push('/'),
+                            _=> return Err(String::from("UNKNOWN ESCAPE CHAR"))
+                        }
+                        escaped = false;
+                    }
+                    else{
+                        build_str.push(char);
+                    }
+                   }
+
+                }
+                if escaped {
+                    return Err(String::from("INVALID String"))
+                }
+                return Ok(JsonValue::String((build_str)))
             } else if input.starts_with('[') && input.ends_with(']') {
                 let mut depth = 0;
                 let mut start = 1;
@@ -26,17 +76,15 @@ fn parseInp(input: &str) -> Result<JsonValue, String> {
                     if escaped {
                         escaped = false
                     } else {
-                        if char == '\\' && inside_string{
+                        if char == '\\' && inside_string {
                             escaped = true
-                        } 
-                        else if char == '"' {
+                        } else if char == '"' {
                             if inside_string {
                                 inside_string = false
                             } else {
                                 inside_string = true
                             }
-                        } 
-                        else {
+                        } else {
                             if char == '[' {
                                 depth += 1
                             } else if char == ']' {
@@ -55,8 +103,8 @@ fn parseInp(input: &str) -> Result<JsonValue, String> {
                     .iter()
                     .map(|x| parseInp(x.trim()))
                     .collect::<Result<Vec<JsonValue>, String>>()?;
-                if inside_string || escaped{
-                    return Err(String::from("Invalid JSON TO PARSE"))
+                if inside_string || escaped {
+                    return Err(String::from("Invalid JSON TO PARSE"));
                 }
                 Ok(JsonValue::Array(v))
             } else if let Ok(x) = input.parse::<i32>() {
@@ -85,3 +133,41 @@ mod tests {
         );
     }
 }
+
+
+
+
+
+
+
+
+
+// discarded code - string iteration 
+                // for char in input[1..input.len() - 1].chars().peekable() {
+                //    if char == '\\'{
+                //     escaped=true;
+                //    }
+                //    else{
+                //     if char == 'u' && escaped{
+                //         unicode = true;
+                //     }
+                //     else if escaped{
+                //         match char{
+                //             'n'=> build_str.push('\n'),
+                //             '\\'=> build_str.push('\\'),
+                //             't'=> build_str.push('\t'),
+                //             'r'=> build_str.push('\r'),
+                //             'f'=> build_str.push(char::from_u32(0x000c).unwrap()),
+                //             'b'=> build_str.push(char::from_u32(0x0008).unwrap()),
+                //             '"'=> build_str.push('\"'),
+                //             '/'=> build_str.push('/'),
+                //             _=> return Err(String::from("UNKNOWN ESCAPE CHAR"))
+                //         }
+                //         escaped = false;
+                //     }
+                //     else{
+                //         build_str.push(char);
+                //     }
+                //    }
+                // }
+                
