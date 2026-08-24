@@ -5,6 +5,7 @@ enum JsonValue {
     Number(i32),
     String(String),
     Array(Vec<JsonValue>),
+    Object(Vec<(String, JsonValue)>),
 }
 
 fn parseInp(input: &str) -> Result<JsonValue, String> {
@@ -17,55 +18,53 @@ fn parseInp(input: &str) -> Result<JsonValue, String> {
             if input.starts_with('"') && input.ends_with('"') {
                 // Ok(JsonValue::String(String::from(&input[1..input.len() - 1])))
                 let mut build_str = String::new();
-                let mut escaped:bool =false;
+                let mut escaped: bool = false;
                 let mut chars = input[1..input.len() - 1].chars().peekable();
 
-                while let Some(char) = chars.next(){
-                     if char == '\\'{
-                    escaped=true;
-                   }
-                   else{
-                    if char == 'u' && escaped{
-                        let mut hSum= 0;
-                        let mut i=0;
-                        while i<4{
-                            match chars.next(){
-                                Some(char)=> {
-                                    hSum = hSum * 16 + char.to_digit(16).ok_or(String::from("Invalid String"))?;
-                                },
-                                None=> return Err(String::from("INVALID STRING"))
-
-                            };
-                            i+=1
-                        } 
-                        let val = char::from_u32(hSum).ok_or(String::from("Invalid String"))?;
-                        build_str.push(val);
-                        escaped = false;
-                    }
-                    else if escaped{
-                        match char{
-                            'n'=> build_str.push('\n'),
-                            '\\'=> build_str.push('\\'),
-                            't'=> build_str.push('\t'),
-                            'r'=> build_str.push('\r'),
-                            'f'=> build_str.push(char::from_u32(0x000c).unwrap()),
-                            'b'=> build_str.push(char::from_u32(0x0008).unwrap()),
-                            '"'=> build_str.push('\"'),
-                            '/'=> build_str.push('/'),
-                            _=> return Err(String::from("UNKNOWN ESCAPE CHAR"))
+                while let Some(char) = chars.next() {
+                    if char == '\\' {
+                        escaped = true;
+                    } else {
+                        if char == 'u' && escaped {
+                            let mut hSum = 0;
+                            let mut i = 0;
+                            while i < 4 {
+                                match chars.next() {
+                                    Some(char) => {
+                                        hSum = hSum * 16
+                                            + char
+                                                .to_digit(16)
+                                                .ok_or(String::from("Invalid String"))?;
+                                    }
+                                    None => return Err(String::from("INVALID STRING")),
+                                };
+                                i += 1
+                            }
+                            let val = char::from_u32(hSum).ok_or(String::from("Invalid String"))?;
+                            build_str.push(val);
+                            escaped = false;
+                        } else if escaped {
+                            match char {
+                                'n' => build_str.push('\n'),
+                                '\\' => build_str.push('\\'),
+                                't' => build_str.push('\t'),
+                                'r' => build_str.push('\r'),
+                                'f' => build_str.push(char::from_u32(0x000c).unwrap()),
+                                'b' => build_str.push(char::from_u32(0x0008).unwrap()),
+                                '"' => build_str.push('\"'),
+                                '/' => build_str.push('/'),
+                                _ => return Err(String::from("UNKNOWN ESCAPE CHAR")),
+                            }
+                            escaped = false;
+                        } else {
+                            build_str.push(char);
                         }
-                        escaped = false;
                     }
-                    else{
-                        build_str.push(char);
-                    }
-                   }
-
                 }
                 if escaped {
-                    return Err(String::from("INVALID String"))
+                    return Err(String::from("INVALID String"));
                 }
-                return Ok(JsonValue::String((build_str)))
+                return Ok(JsonValue::String(build_str));
             } else if input.starts_with('[') && input.ends_with(']') {
                 let mut depth = 0;
                 let mut start = 1;
@@ -107,6 +106,44 @@ fn parseInp(input: &str) -> Result<JsonValue, String> {
                     return Err(String::from("Invalid JSON TO PARSE"));
                 }
                 Ok(JsonValue::Array(v))
+            } else if input.starts_with('{') && input.ends_with('}') {
+                let mut isArray = false;
+                let mut isString = false;
+                let mut escaped = false;
+                let mut vEle:Vec<String> = vec![];
+                let mut start = 1;
+                for (i, char) in input.char_indices() { 
+                    if escaped {
+                        escaped = false
+                    } else {
+                        if char =='\\' && isString{
+                            escaped = true
+                        }
+                        else if char == '"' {
+                            if !escaped {
+                                if !isString {
+                                    isString = true
+                                } else {
+                                    isString = false
+                                }
+                            }
+                            escaped = false
+                        } else if char == '[' && !isString{
+                            isArray = true
+                        } else if char == ']' && !isString{
+                            isArray = false
+                        } else {
+                            if !isString && !isArray && char == ','{
+                                vEle.push(input[start..i].to_string());
+                                start = i + 1
+                            }
+                        }
+                    }
+                }
+                vEle.push(input[start..input.len()-1].to_string());
+                print!("{vEle:?}");
+
+                return Ok(JsonValue::Array(vec![]));
             } else if let Ok(x) = input.parse::<i32>() {
                 return Ok(JsonValue::Number(x));
             } else {
@@ -120,7 +157,9 @@ fn main() {}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::print;
+
+use super::*;
     #[test]
     fn test_basic_array_split() {
         assert_eq!(
@@ -132,42 +171,42 @@ mod tests {
             ]))
         );
     }
+
+    #[test]
+// INCOMPLETE TEST FOR NOW , WILL FIX IT LATER
+    fn test_obj_split(){
+        
+            let val =parseInp(r#"{"name":"mh","age":25}"#).unwrap();
+            
+        
+    }
 }
 
-
-
-
-
-
-
-
-
-// discarded code - string iteration 
-                // for char in input[1..input.len() - 1].chars().peekable() {
-                //    if char == '\\'{
-                //     escaped=true;
-                //    }
-                //    else{
-                //     if char == 'u' && escaped{
-                //         unicode = true;
-                //     }
-                //     else if escaped{
-                //         match char{
-                //             'n'=> build_str.push('\n'),
-                //             '\\'=> build_str.push('\\'),
-                //             't'=> build_str.push('\t'),
-                //             'r'=> build_str.push('\r'),
-                //             'f'=> build_str.push(char::from_u32(0x000c).unwrap()),
-                //             'b'=> build_str.push(char::from_u32(0x0008).unwrap()),
-                //             '"'=> build_str.push('\"'),
-                //             '/'=> build_str.push('/'),
-                //             _=> return Err(String::from("UNKNOWN ESCAPE CHAR"))
-                //         }
-                //         escaped = false;
-                //     }
-                //     else{
-                //         build_str.push(char);
-                //     }
-                //    }
-                // }
-                
+// discarded code - string iteration
+// for char in input[1..input.len() - 1].chars().peekable() {
+//    if char == '\\'{
+//     escaped=true;
+//    }
+//    else{
+//     if char == 'u' && escaped{
+//         unicode = true;
+//     }
+//     else if escaped{
+//         match char{
+//             'n'=> build_str.push('\n'),
+//             '\\'=> build_str.push('\\'),
+//             't'=> build_str.push('\t'),
+//             'r'=> build_str.push('\r'),
+//             'f'=> build_str.push(char::from_u32(0x000c).unwrap()),
+//             'b'=> build_str.push(char::from_u32(0x0008).unwrap()),
+//             '"'=> build_str.push('\"'),
+//             '/'=> build_str.push('/'),
+//             _=> return Err(String::from("UNKNOWN ESCAPE CHAR"))
+//         }
+//         escaped = false;
+//     }
+//     else{
+//         build_str.push(char);
+//     }
+//    }
+// }
