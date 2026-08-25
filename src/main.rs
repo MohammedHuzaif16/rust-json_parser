@@ -1,3 +1,5 @@
+use std::print;
+
 #[derive(PartialEq, Debug)]
 enum JsonValue {
     Null,
@@ -107,19 +109,24 @@ fn parseInp(input: &str) -> Result<JsonValue, String> {
                 }
                 Ok(JsonValue::Array(v))
             } else if input.starts_with('{') && input.ends_with('}') {
-                let mut isArray = false;
+                if input == "{}" {
+                    return Ok(JsonValue::Object(vec![]));
+                }
                 let mut isString = false;
                 let mut escaped = false;
-                let mut vEle:Vec<String> = vec![];
+                let mut vEle: Vec<String> = vec![];
                 let mut start = 1;
-                for (i, char) in input.char_indices() { 
-                    if escaped {
+                let mut arrayDepth = 0;
+                let mut objDepth = 0;
+                for (i, char) in input.char_indices() {
+                    if char == '{' && i == 0 || char == '}' && i == input.len() - 1 {
+                        continue;
+                    } else if escaped {
                         escaped = false
                     } else {
-                        if char =='\\' && isString{
+                        if char == '\\' && isString {
                             escaped = true
-                        }
-                        else if char == '"' {
+                        } else if char == '"' {
                             if !escaped {
                                 if !isString {
                                     isString = true
@@ -128,22 +135,53 @@ fn parseInp(input: &str) -> Result<JsonValue, String> {
                                 }
                             }
                             escaped = false
-                        } else if char == '[' && !isString{
-                            isArray = true
-                        } else if char == ']' && !isString{
-                            isArray = false
+                        } else if char == '[' && !isString {
+                            arrayDepth += 1
+                        } else if char == ']' && !isString {
+                            arrayDepth -= 1;
+                        } else if char == '{' && !isString {
+                            objDepth += 1
+                        } else if char == '}' && !isString {
+                            objDepth -= 1;
                         } else {
-                            if !isString && !isArray && char == ','{
+                            if !isString && arrayDepth == 0 && objDepth == 0 && char == ',' {
                                 vEle.push(input[start..i].to_string());
                                 start = i + 1
                             }
                         }
                     }
                 }
-                vEle.push(input[start..input.len()-1].to_string());
-                print!("{vEle:?}");
+                vEle.push(input[start..input.len() - 1].to_string());
 
-                return Ok(JsonValue::Array(vec![]));
+                let mut kv: Vec<(String, JsonValue)> = vec![];
+                for ele in vEle {
+                    isString = false;
+                    escaped = false;
+                    for (i, char) in ele.char_indices() {
+                        if escaped {
+                            escaped = false;
+                        } else {
+                            if char == '\\' {
+                                escaped = true
+                            } else if char == '"' {
+                                if isString {
+                                    isString = false
+                                } else {
+                                    isString = true
+                                }
+                            } else if char == ':' && !isString {
+                                match parseInp(&ele[..i])? {
+                                    JsonValue::String(x) => {
+                                        kv.push((x, parseInp(ele[i + 1..ele.len()].trim())?));
+                                    }
+                                    _ => return Err(String::from("Incorrect Key")),
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+                return Ok(JsonValue::Object(kv));
             } else if let Ok(x) = input.parse::<i32>() {
                 return Ok(JsonValue::Number(x));
             } else {
@@ -159,7 +197,7 @@ fn main() {}
 mod tests {
     use std::print;
 
-use super::*;
+    use super::*;
     #[test]
     fn test_basic_array_split() {
         assert_eq!(
@@ -173,12 +211,9 @@ use super::*;
     }
 
     #[test]
-// INCOMPLETE TEST FOR NOW , WILL FIX IT LATER
-    fn test_obj_split(){
-        
-            let val =parseInp(r#"{"name":"mh","age":25}"#).unwrap();
-            
-        
+    // INCOMPLETE TEST FOR NOW , WILL FIX IT LATER
+    fn test_obj_split() {
+        let val = parseInp(r#"{"name":"mh","age":25}"#).unwrap();
     }
 }
 
