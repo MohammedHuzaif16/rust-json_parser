@@ -4,7 +4,7 @@ use std::print;
 enum JsonValue {
     Null,
     Bool(bool),
-    Number(i32),
+    Number(f64),
     String(String),
     Array(Vec<JsonValue>),
     Object(Vec<(String, JsonValue)>),
@@ -145,13 +145,13 @@ fn parseInp(input: &str) -> Result<JsonValue, String> {
                             objDepth -= 1;
                         } else {
                             if !isString && arrayDepth == 0 && objDepth == 0 && char == ',' {
-                                vEle.push(input[start..i].to_string());
+                                vEle.push(input[start..i].trim().to_string());
                                 start = i + 1
                             }
                         }
                     }
                 }
-                vEle.push(input[start..input.len() - 1].to_string());
+                vEle.push(input[start..input.len() - 1].trim().to_string());
 
                 let mut kv: Vec<(String, JsonValue)> = vec![];
                 for ele in vEle {
@@ -182,7 +182,7 @@ fn parseInp(input: &str) -> Result<JsonValue, String> {
                     }
                 }
                 return Ok(JsonValue::Object(kv));
-            } else if let Ok(x) = input.parse::<i32>() {
+            } else if let Ok(x) = input.parse::<f64>() {
                 return Ok(JsonValue::Number(x));
             } else {
                 return Err(String::from("wWrong type"));
@@ -195,7 +195,7 @@ fn main() {}
 
 #[cfg(test)]
 mod tests {
-    use std::print;
+    use std::{assert_eq, print};
 
     use super::*;
     #[test]
@@ -211,37 +211,19 @@ mod tests {
     }
 
     #[test]
-    // INCOMPLETE TEST FOR NOW , WILL FIX IT LATER
-    fn test_obj_split() {
-        let val = parseInp(r#"{"name":"mh","age":25}"#).unwrap();
+    fn test_obj() {
+        assert_eq!(parseInp(r#"{"name":"mh","age":25}"#), Ok(JsonValue::Object( vec![("name".to_string(),JsonValue::String("mh".to_string())), ("age".to_string(),JsonValue::Number(25))])))
+    }
+
+    #[test]
+    fn test_null_obj(){
+        assert_eq!(parseInp(r#"{}"#), Ok(JsonValue::Object(vec![])))
+    }
+
+    #[test]
+    fn test_obj_all(){
+        assert_eq!(parseInp(r#"{"active":true,"value":null, "url":"http://example.com","user":{"items":[1,2,3]}}"#),
+        Ok(JsonValue::Object(vec![("active".to_string(),JsonValue::Bool(true)),("value".to_string(),JsonValue::Null),("url".to_string(),JsonValue::String("http://example.com".to_string())), ("user".to_string(), JsonValue::Object(vec![("items".to_string(), JsonValue::Array(vec![JsonValue::Number(1),JsonValue::Number(2),JsonValue::Number(3)]))]))]))
+    )
     }
 }
-
-// discarded code - string iteration
-// for char in input[1..input.len() - 1].chars().peekable() {
-//    if char == '\\'{
-//     escaped=true;
-//    }
-//    else{
-//     if char == 'u' && escaped{
-//         unicode = true;
-//     }
-//     else if escaped{
-//         match char{
-//             'n'=> build_str.push('\n'),
-//             '\\'=> build_str.push('\\'),
-//             't'=> build_str.push('\t'),
-//             'r'=> build_str.push('\r'),
-//             'f'=> build_str.push(char::from_u32(0x000c).unwrap()),
-//             'b'=> build_str.push(char::from_u32(0x0008).unwrap()),
-//             '"'=> build_str.push('\"'),
-//             '/'=> build_str.push('/'),
-//             _=> return Err(String::from("UNKNOWN ESCAPE CHAR"))
-//         }
-//         escaped = false;
-//     }
-//     else{
-//         build_str.push(char);
-//     }
-//    }
-// }
