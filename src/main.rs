@@ -1,5 +1,352 @@
-use std::print;
+use std::{str::Chars, iter::Peekable};
+struct Parser<'a>{
+    input:&'a str,
+    chars:Peekable<Chars<'a>>
 
+}
+
+impl<'a> Parser<'a>{
+    fn new(inp:&'a str)->Parser{
+        Parser{
+            input:inp,
+            chars:inp.chars().peekable()
+        }
+    }
+
+    fn fwdP(&mut self)->Option<char>{
+        return self.chars.next();
+
+    }
+
+    fn skipWhtSp(&mut self){
+        while let Some(&ch) = self.chars.peek(){
+            if ch.is_whitespace(){
+                self.chars.next();
+            }
+            else{
+                break
+            }
+        }
+    }
+
+    fn pkable(&mut self)->Option<&char>{
+        return self.chars.peek()
+    }
+    
+    fn mtchInt(&mut self,s:&str)->bool{
+        for ch in s.chars(){
+            match self.fwdP(){
+                Some(c)=>{
+                    if c != ch{
+                        return false
+                    }
+                }
+                None=> return false
+            }
+        }
+        return true
+    }
+
+    fn parseInp(&mut self)->Result<JsonValue,JsonError>{
+        self.skipWhtSp();
+        match self.pkable().unwrap() {
+        'n' => {
+            let val = self.mtchInt(&"null");
+            if !val{
+                return Err(JsonError::Generic)
+            }
+            return Ok(JsonValue::Null)
+        }
+        't' => {
+            let val = self.mtchInt(&"true");
+            if !val{
+                return Err(JsonError::Generic);
+            }
+            Ok(JsonValue::Bool(true))
+        },
+        'f' => {
+            let val = self.mtchInt(&"false");
+            if !val{
+                return Err(JsonError::Generic)
+            }
+            Ok(JsonValue::Bool(false))
+        },
+        '"'=>   self.parseString(),
+        '['=>   self.parseArray(),
+        '{'=>   self.parseObject(),
+        '-'|'0'..='9'=> self.parseNumber()}
+    }
+
+        fn parseArray(&mut self) -> Result<JsonValue, JsonError> {
+        let mut v = vec![];
+        self.skipWhtSp();
+        if let Some(&ch)=self.pkable(){
+            if ch==']'{
+                self.fwdP();
+                return Ok(JsonValue::Array(v))
+            }
+        }
+
+            loop{
+                let val = self.parseInp()?;
+                v.push(val);
+                self.skipWhtSp();
+                match self.pkable(){
+                    Some(&']')=>{
+                        self.fwdP();
+                        return Ok(JsonValue::Array(v))
+                    }
+                    Some(&',')=>{
+                        self.fwdP();
+                        self.skipWhtSp();
+                    }
+                    _=> return Err(JsonError::Generic)
+                }
+            }
+        }
+    }
+fn parseNumber(&mut self) -> Result<JsonValue, JsonError> {
+    self.skipWhtSp();
+
+    let mut is_decimal = false;
+    let mut is_exp = false;
+    let mut exp_sign = false;
+    let mut exp_digit = false;
+    let mut integer_digit_count = 0;
+    let mut build_num = String::new();
+
+    if let Some(&x) = self.pkable() {
+        if x == '-' {
+            build_num.push(x);
+            self.fwdP();
+        }
+    }
+
+    while let Some(ch) = self.fwdP() {
+        // Integer / fraction / exponent digits
+        if ch.is_ascii_digit() {
+            if !is_decimal && !is_exp {
+                integer_digit_count += 1;
+
+                // Leading zero: 01, 00, 012 etc. are invalid
+                if integer_digit_count == 1 && ch == '0' {
+                    if let Some(&x) = self.pkable() {
+                        if x.is_ascii_digit() {
+                            return Err(JsonError::NumberError);
+                        }
+                    }
+                }
+            }
+
+            if is_exp {
+                exp_digit = true;
+            }
+
+            build_num.push(ch);
+            continue;
+        }
+
+        // Decimal point
+        if ch == '.' {
+            if is_decimal || is_exp {
+                return Err(JsonError::NumberError);
+            }
+
+            match self.pkable() {
+                Some(&x) if x.is_ascii_digit() => {}
+                _ => return Err(JsonError::NumberError),
+            }
+
+            is_decimal = true;
+            build_num.push(ch);
+            continue;
+        }
+
+        // Exponent
+        if ch == 'e' || ch == 'E' {
+            if is_exp {
+                return Err(JsonError::NumberError);
+            }
+
+            match self.pkable() {
+                Some(&x) if x.is_ascii_digit() => {}
+                Some(&x) if x == '+' || x == '-' => {}
+                _ => return Err(JsonError::NumberError),
+            }
+
+            is_exp = true;
+            build_num.push(ch);
+            continue;
+        }
+
+        // Exponent sign
+        if ch == '+' || ch == '-' {
+            if !is_exp || exp_sign {
+                return Err(JsonError::NumberError);
+            }
+
+            match self.pkable() {
+                Some(&x) if x.is_ascii_digit() => {}
+                _ => return Err(JsonError::NumberError),
+            }
+
+            exp_sign = true;
+            build_num.push(ch);
+            continue;
+        }
+
+        // Number finished
+        if ch == ',' || ch == ']' || ch == '}' {
+            if is_exp && !exp_digit {
+                return Err(JsonError::NumberError);
+            }
+
+            return match build_num.parse::<f64>() {
+                Ok(x) => Ok(JsonValue::Number(x)),
+                Err(_) => Err(JsonError::NumberError),
+            };
+        }
+
+        return Err(JsonError::NumberError);
+    }
+
+    if is_exp && !exp_digit {
+        return Err(JsonError::NumberError);
+    }
+
+    match build_num.parse::<f64>() {
+        Ok(x) => Ok(JsonValue::Number(x)),
+        Err(_) => Err(JsonError::NumberError),
+    }
+}
+    fn parseString(&mut self) -> Result<JsonValue, JsonError> {
+        self.fwdP();
+        let mut build_str = String::new();
+        let mut escaped: bool = false;
+
+        while let Some(char) = self.fwdP(){
+            if char=='"' && !escaped{
+                return Ok(JsonValue::String(build_str))
+            }
+            else if char == '\\' && !escaped {
+                escaped = true;
+            } else {
+                if char == 'u' && escaped {
+                    let mut hSum = 0;
+                    let mut i = 0;
+                    while i < 4 {
+                        match self.fwdP() {
+                            Some(char) => {
+                                hSum = hSum * 16
+                                    + char.to_digit(16).ok_or(JsonError::StringError)?;
+                            }
+                            None => return Err(JsonError::StringError),
+                        };
+                        i += 1
+                    }
+                    let val = char::from_u32(hSum).ok_or(JsonError::String)?;
+                    build_str.push(val);
+                    escaped = false;
+                } else if escaped {
+                    match char {
+                        'n' => build_str.push('\n'),
+                        '\\' => build_str.push('\\'),
+                        't' => build_str.push('\t'),
+                        'r' => build_str.push('\r'),
+                        'f' => build_str.push(char::from_u32(0x000c).unwrap()),
+                        'b' => build_str.push(char::from_u32(0x0008).unwrap()),
+                        '"' => build_str.push('\"'),
+                        '/' => build_str.push('/'),
+                        _ => return Err(JsonError::StringError),
+                    }
+                    escaped = false;
+                } else {
+                    build_str.push(char);
+                }
+            }
+        }
+        return Err(JsonError::StringError);
+
+    }
+
+    fn parseObject(&mut self) -> Result<JsonValue, JsonError> {
+        
+        if self. {
+            return Ok(JsonValue::Object(vec![]));
+        }
+        let mut isString = false;
+        let mut escaped = false;
+        let mut vEle: Vec<String> = vec![];
+        let mut start = 1;
+        let mut arrayDepth = 0;
+        let mut objDepth = 0;
+        for (i, char) in input.char_indices() {
+            if char == '{' && i == 0 || char == '}' && i == input.len() - 1 {
+                continue;
+            } else if escaped {
+                escaped = false
+            } else {
+                if char == '\\' && isString {
+                    escaped = true
+                } else if char == '"' {
+                    if !escaped {
+                        if !isString {
+                            isString = true
+                        } else {
+                            isString = false
+                        }
+                    }
+                    escaped = false
+                } else if char == '[' && !isString {
+                    arrayDepth += 1
+                } else if char == ']' && !isString {
+                    arrayDepth -= 1;
+                } else if char == '{' && !isString {
+                    objDepth += 1
+                } else if char == '}' && !isString {
+                    objDepth -= 1;
+                } else {
+                    if !isString && arrayDepth == 0 && objDepth == 0 && char == ',' {
+                        vEle.push(input[start..i].trim().to_string());
+                        start = i + 1
+                    }
+                }
+            }
+        }
+        vEle.push(input[start..input.len() - 1].trim().to_string());
+
+        let mut kv: Vec<(String, JsonValue)> = vec![];
+        for ele in vEle {
+            isString = false;
+            escaped = false;
+            for (i, char) in ele.char_indices() {
+                if escaped {
+                    escaped = false;
+                } else {
+                    if char == '\\' {
+                        escaped = true
+                    } else if char == '"' {
+                        if isString {
+                            isString = false
+                        } else {
+                            isString = true
+                        }
+                    } else if char == ':' && !isString {
+                        match self.parseInp(&ele[..i])? {
+                            JsonValue::String(x) => {
+                                kv.push((x, self.parseInp(ele[i + 1..ele.len()].trim())?));
+                            }
+                            _ => return Err(JsonError::ObjectError),
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        return Ok(JsonValue::Object(kv));
+    }
+
+}
 #[derive(PartialEq, Debug)]
 enum JsonValue {
     Null,
@@ -10,12 +357,13 @@ enum JsonValue {
     Object(Vec<(String, JsonValue)>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum JsonError {
     StringError,
     ArrayError,
     ObjectError,
     NumberError,
+    Generic
 }
 
 fn parseInp(input: &str) -> Result<JsonValue, JsonError> {
@@ -218,7 +566,7 @@ fn parseArray(input: &str) -> Result<JsonValue, JsonError> {
     }
     let v = v
         .iter()
-        .map(|x| parseInp(x.trim()))
+        .map(|x| self.parseInp(x.trim()))
         .collect::<Result<Vec<JsonValue>, JsonError>>()?;
     if inside_string || escaped {
         return Err(JsonError::ArrayError);
@@ -287,9 +635,9 @@ fn parseObject(input: &str) -> Result<JsonValue, JsonError> {
                         isString = true
                     }
                 } else if char == ':' && !isString {
-                    match parseInp(&ele[..i])? {
+                    match self.parseInp(&ele[..i])? {
                         JsonValue::String(x) => {
-                            kv.push((x, parseInp(ele[i + 1..ele.len()].trim())?));
+                            kv.push((x, self.parseInp(ele[i + 1..ele.len()].trim())?));
                         }
                         _ => return Err(JsonError::ObjectError),
                     }
@@ -300,7 +648,12 @@ fn parseObject(input: &str) -> Result<JsonValue, JsonError> {
     }
     return Ok(JsonValue::Object(kv));
 }
-fn main() {}
+fn main() {
+    let st = String::from(r#"{"active":true,"value":null, "url":"http://example.com","user":{"items":[1,2,3]}}"#);
+    let mut p1= Parser::new(&st);
+    let par = p1.parseInp(&st);
+    println!("{par:?}")
+}
 
 #[cfg(test)]
 mod tests {
